@@ -40,9 +40,9 @@ static gint64 last_tick = 0;
 
 static GtkWidget *drawing;
 
-static Actor player = {9, 2, 9*TILE_SIZE, 2*TILE_SIZE, -1, TILE_SIZE, TILE_SIZE, 0.0, 0.15, -1, TRUE};
+static Actor playerx = {9, 2, 9*TILE_SIZE, 2*TILE_SIZE, -1, TILE_SIZE, TILE_SIZE, 0.0, 0.15, -1, TRUE};
 
-static Actor enemy = {1, 2, 1*TILE_SIZE, 2*TILE_SIZE, -1, TILE_SIZE, TILE_SIZE, 0.0, 0.15, 3, FALSE};
+static Actor enemy = {1, 2, 1*TILE_SIZE, 2*TILE_SIZE, 2, TILE_SIZE, TILE_SIZE, 0.0, 0.15, -1, FALSE};
 
 static guint map[ZONE_HEIGHT][ZONE_WIDTH] = { { [0 ... ZONE_WIDTH-1] = BRICK_TOP}, 
                                               { BRICK_TOP, [1 ... ZONE_WIDTH-2] = BRICK_WALL, BRICK_TOP}, 
@@ -105,6 +105,9 @@ static void draw_map(cairo_t * cr, guint width, guint height, guint i, guint j) 
 
 static gboolean will_block_on_wall(Actor * player, gint xdirection, gint ydirection) {
   guint nexttile = map[player->ytile+ydirection][player->xtile+xdirection];
+  if (!player->human) {
+    printf ("Checking tile %d,%d in direction %d, %d, found %d\n", player->ytile+ydirection, player->xtile+xdirection, xdirection, ydirection, nexttile);
+  }
   return (nexttile != GREY_FLOOR && nexttile != GREY_FLOOR_WITHOUT_COIN);
   
 }
@@ -140,25 +143,32 @@ static gboolean update_player_position (Actor* player) {
 static guint randomize_next_direction (Actor *player) {
   gboolean possible[4] = {[0 ... 3] = FALSE};
   guint i;
-  for (i=0;i<4;i++) {
-    gint xdirection = ((i + 1)%4-2)%2;
-    gint ydirection = (i%4-2)%2;
-    gint oldxdirection = ((player->direction + 1)%4-2)%2;
-    gint oldydirection = (player->direction%4-2)%2;
-    if (!will_block_on_wall(player, xdirection, ydirection)) {
-      possible[i] = TRUE;
-    }
-  }
+  
+  if (!will_block_on_wall(player, -1, 0) && player->direction != 2) possible[0] = TRUE;
+  if (!will_block_on_wall(player, 0, -1) && player->direction != 3) possible[1] = TRUE;
+  if (!will_block_on_wall(player, 1, 0) && player->direction != 0) possible[2] = TRUE;
+  if (!will_block_on_wall(player, 0, 1) && player->direction != 1) possible[3] = TRUE;
+  printf ("Randomizing at %d, %d from %d, %d, %d, %d\n", player->ytile, player->xtile, possible[0], possible[1], possible[2], possible[3]);
+  
+  gboolean one_way = !possible[0] && !possible [1] && !possible[2] && !possible[3];
+  if (one_way)
+    return player->direction + 2 % 4;
+    
   do {
     i = rand()%4;
   } while (!possible[i]);
+  
   return i;
 }
 
 static gboolean update_enemy_position (Actor* player) {
-  gint xdirection, ydirection;
-  xdirection = ((player->direction + 1)%4-2)%2;
-  ydirection = (player->direction%4-2)%2;
+  if (player->direction == -1)
+    return FALSE;
+  gint xdirection = ((player->direction + 1)%4-2)%2;
+  gint ydirection = (player->direction%4-2)%2;
+  if (will_block_on_wall (player, xdirection, ydirection)) {
+    player->direction = -1;
+  }
   if (player->direction != -1) {
     player->progress +=  player->speed;
     player->xpos = player->xtile * player->xsize + xdirection * player->progress * player->xsize;
@@ -169,9 +179,8 @@ static gboolean update_enemy_position (Actor* player) {
       player->direction = randomize_next_direction(player);
       player->progress = 0.0;
     }
-    //map[player->ytile][player->xtile] = GREY_FLOOR_WITHOUT_COIN;
     return TRUE;
-  } 
+  }
   return FALSE;
 }
 
@@ -182,9 +191,9 @@ static gboolean on_tick (gpointer user_data) {
     last_tick = current;
     return G_SOURCE_CONTINUE;
   }
-  changed = update_player_position(&player);
+  changed = update_player_position(&playerx);
   if (changed) {
-    gtk_widget_queue_draw_area (drawing, player.xpos - player.xsize, player.ypos - player.ysize, 3*player.xsize, 3*player.ysize);
+    gtk_widget_queue_draw_area (drawing, playerx.xpos - playerx.xsize, playerx.ypos - playerx.ysize, 3*playerx.xsize, 3*playerx.ysize);
   }
   changed = update_enemy_position(&enemy);
   if (changed) {
@@ -214,16 +223,16 @@ static void on_draw (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
   //printf ("Hello from %dx%d drawn\n", allocation.width, allocation.height);
   sizeX = allocation.width/ZONE_WIDTH;
   sizeY = allocation.height/ZONE_HEIGHT;
-  player.xsize = sizeX;
-  player.ysize = sizeY;
+  playerx.xsize = sizeX;
+  playerx.ysize = sizeY;
   enemy.xsize = sizeX;
   enemy.ysize = sizeY;
   if (sizeX != size) {
     g_source_remove (tick_cb);
     size = sizeX;
     tick_cb = g_timeout_add (1000/FPS/2, (GSourceFunc)on_tick, GINT_TO_POINTER(size));
-    player.xpos = player.xtile * sizeX;
-    player.ypos = player.ytile * sizeY;
+    playerx.xpos = playerx.xtile * sizeX;
+    playerx.ypos = playerx.ytile * sizeY;
     enemy.xpos = enemy.xtile * sizeX;
     enemy.ypos = enemy.ytile * sizeY;
   }
@@ -243,7 +252,7 @@ static void on_draw (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
   //  cairo_move_to(cr, i*sizeX, 0);
   //  cairo_line_to(cr, i*sizeX, sizeY*ZONE_HEIGHT);
   //}
-  draw_actor (cr, &player);
+  draw_actor (cr, &playerx);
   draw_actor (cr, &enemy);
   //if (map[player.ytile+1][player.xtile] == BRICK_TOP) {
     //draw_map(cr, sizeX, sizeY, player.ytile+1, player.xtile-1 );
@@ -304,10 +313,9 @@ main (int argc, char *argv[])
   gtk_container_add (GTK_CONTAINER (window), drawing);
   gtk_container_set_border_width (GTK_CONTAINER(window), 12);
   g_signal_connect (drawing, "draw", G_CALLBACK (on_draw), NULL);
-  g_signal_connect (window, "key-release-event", G_CALLBACK (on_key_released), &player);
+  g_signal_connect (window, "key-release-event", G_CALLBACK (on_key_released), &playerx);
   gtk_widget_show_all (window);
   tick_cb = g_timeout_add (1000/FPS/2,(GSourceFunc)on_tick, GINT_TO_POINTER(size));
-  enemy.direction = 1;
   gtk_main ();
 
   return 0;
