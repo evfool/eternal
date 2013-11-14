@@ -1,4 +1,4 @@
-// gcc eternal.c -o umbrae `pkg-config gtk+-3.0 librsvg-2.0 --cflags --libs` -lm
+// gcc eternal.c -o eternal `pkg-config gtk+-3.0 librsvg-2.0 --cflags --libs` -lm
 #include <stdlib.h>
 #include <math.h>
 
