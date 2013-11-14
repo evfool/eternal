@@ -33,6 +33,8 @@ typedef struct {
   gboolean human;
 } Actor;
 
+static GRand * randgen;
+
 static guint size = TILE_SIZE;
 static guint tick_cb = 0;
 static gboolean fullscreen = FALSE;
@@ -153,9 +155,8 @@ static guint randomize_next_direction (Actor *player) {
   gboolean one_way = !possible[0] && !possible [1] && !possible[2] && !possible[3];
   if (one_way)
     return player->direction + 2 % 4;
-    
   do {
-    i = rand()%4;
+    i = g_rand_int_range (randgen,0,4);
   } while (!possible[i]);
   
   return i;
@@ -303,7 +304,7 @@ main (int argc, char *argv[])
   GtkWidget *window;
 
   gtk_init (&argc, &argv);
-  
+  randgen = g_rand_new_with_seed (g_get_real_time());
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW (window), WINWIDTH, WINHEIGHT);
   gtk_window_set_title (GTK_WINDOW (window), "Scrolling drawingArea");
