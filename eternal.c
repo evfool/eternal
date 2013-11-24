@@ -20,7 +20,7 @@
 #define TILE_SIZE 32
 #define ZONE_WIDTH 20
 #define ZONE_HEIGHT 15
-#define FPS 30
+#define FPS 60
 
 typedef struct {
   guint xtile, ytile;
