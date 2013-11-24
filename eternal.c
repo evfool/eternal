@@ -33,6 +33,8 @@ typedef struct {
   gboolean human;
 } Actor;
 
+static RsvgHandle * tiles[4];
+static RsvgHandle *coin;
 static GRand * randgen;
 
 static guint size = TILE_SIZE;
@@ -42,9 +44,9 @@ static gint64 last_tick = 0;
 
 static GtkWidget *drawing;
 
-static Actor playerx = {9, 2, 9*TILE_SIZE, 2*TILE_SIZE, -1, TILE_SIZE, TILE_SIZE, 0.0, 0.15, -1, TRUE};
+static Actor playerx = {9, 2, 9*TILE_SIZE, 2*TILE_SIZE, -1, TILE_SIZE, TILE_SIZE, 0.0, 0.25, -1, TRUE};
 
-static Actor enemy = {1, 2, 1*TILE_SIZE, 2*TILE_SIZE, 2, TILE_SIZE, TILE_SIZE, 0.0, 0.15, -1, FALSE};
+static Actor enemy = {1, 2, 1*TILE_SIZE, 2*TILE_SIZE, 2, TILE_SIZE, TILE_SIZE, 0.0, 0.25, -1, FALSE};
 
 static guint map[ZONE_HEIGHT][ZONE_WIDTH] = { { [0 ... ZONE_WIDTH-1] = BRICK_TOP}, 
                                               { BRICK_TOP, [1 ... ZONE_WIDTH-2] = BRICK_WALL, BRICK_TOP}, 
@@ -83,7 +85,6 @@ on_fullscreen (GtkButton *button,
 //  RsvgHandle* svg = rsvg_handle_new_from_file ("ship.svg", NULL);
 //  rsvg_handle_render_cairo(svg, cr);
 static void draw_map(cairo_t * cr, guint width, guint height, guint i, guint j) {
-  //printf ("Drawing %dx%d\n", j, i);
   switch (map[i][j]) {
     case BRICK_WALL:
     cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 1.0);
@@ -105,11 +106,26 @@ static void draw_map(cairo_t * cr, guint width, guint height, guint i, guint j) 
   
 }
 
+static void draw_map_svg(cairo_t * cr, guint width, guint height, guint i, guint j) {
+  
+  cairo_save (cr);
+  cairo_translate (cr, j*70, i*70);
+  rsvg_handle_render_cairo(tiles[map[i][j]], cr);
+  if (map[i][j] == GREY_FLOOR) {
+    cairo_translate (cr, 35/2, 35/2);
+    cairo_set_source_rgba(cr, 0.7, 0.7, 0.7, 0.7);
+    cairo_arc(cr, 35/2, 5+35/2, 18, 0, 2*M_PI);
+    cairo_fill(cr);
+    rsvg_handle_render_cairo(coin, cr);
+  }
+  cairo_restore (cr);
+}
+
 static gboolean will_block_on_wall(Actor * player, gint xdirection, gint ydirection) {
   guint nexttile = map[player->ytile+ydirection][player->xtile+xdirection];
-  if (!player->human) {
-    printf ("Checking tile %d,%d in direction %d, %d, found %d\n", player->ytile+ydirection, player->xtile+xdirection, xdirection, ydirection, nexttile);
-  }
+  //if (!player->human) {
+    //printf ("Checking tile %d,%d in direction %d, %d, found %d\n", player->ytile+ydirection, player->xtile+xdirection, xdirection, ydirection, nexttile);
+  //}
   return (nexttile != GREY_FLOOR && nexttile != GREY_FLOOR_WITHOUT_COIN);
   
 }
@@ -150,7 +166,7 @@ static guint randomize_next_direction (Actor *player) {
   if (!will_block_on_wall(player, 0, -1) && player->direction != 3) possible[1] = TRUE;
   if (!will_block_on_wall(player, 1, 0) && player->direction != 0) possible[2] = TRUE;
   if (!will_block_on_wall(player, 0, 1) && player->direction != 1) possible[3] = TRUE;
-  printf ("Randomizing at %d, %d from %d, %d, %d, %d\n", player->ytile, player->xtile, possible[0], possible[1], possible[2], possible[3]);
+  //printf ("Randomizing at %d, %d from %d, %d, %d, %d\n", player->ytile, player->xtile, possible[0], possible[1], possible[2], possible[3]);
   
   gboolean one_way = !possible[0] && !possible [1] && !possible[2] && !possible[3];
   if (one_way)
@@ -205,7 +221,6 @@ static gboolean on_tick (gpointer user_data) {
 }
 
 static void draw_actor (cairo_t * cr, Actor * player) {
-  //printf ("Drawing player %dx%d with directions %d, next %d\n", player->xtile, player->ytile, player->direction, player->nextdirection);
   if (player->human) {
     cairo_set_source_rgba (cr, 1.0, 0.0, 0.0, 1.0);
   } else {
@@ -221,7 +236,6 @@ static void on_draw (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
   guint sizeX, sizeY;
   guint startX, startY;
   gtk_widget_get_allocation (widget, &allocation);
-  //printf ("Hello from %dx%d drawn\n", allocation.width, allocation.height);
   sizeX = allocation.width/ZONE_WIDTH;
   sizeY = allocation.height/ZONE_HEIGHT;
   playerx.xsize = sizeX;
@@ -240,27 +254,16 @@ static void on_draw (GtkWidget *widget, cairo_t *cr, gpointer user_data) {
   startX = (allocation.width - sizeX*ZONE_WIDTH)/2;
   startY = (allocation.height - sizeY*ZONE_HEIGHT)/2;
   cairo_translate (cr, startX, startY);
+  cairo_save(cr);
+  cairo_scale (cr,  ((double)sizeX)/70, ((double)sizeY)/70);
   for (i=0;i<ZONE_HEIGHT;i++){
     for (j=0;j<ZONE_WIDTH;j++) {
-      draw_map(cr, sizeX, sizeY, i, j);
+      draw_map_svg(cr, sizeX, sizeY, i, j);
     }
   }
-  //for (i=0;i<=ZONE_HEIGHT;i++) {
-  //  cairo_move_to(cr, 0, i*sizeY);
-  //  cairo_line_to(cr, 0+sizeX*ZONE_WIDTH, i*sizeY);
-  //}
-  //for (i=0;i<=ZONE_WIDTH;i++) {
-  //  cairo_move_to(cr, i*sizeX, 0);
-  //  cairo_line_to(cr, i*sizeX, sizeY*ZONE_HEIGHT);
-  //}
+  cairo_restore(cr);
   draw_actor (cr, &playerx);
   draw_actor (cr, &enemy);
-  //if (map[player.ytile+1][player.xtile] == BRICK_TOP) {
-    //draw_map(cr, sizeX, sizeY, player.ytile+1, player.xtile-1 );
-    //draw_map(cr, sizeX, sizeY, player.ytile+1, player.xtile );
-    //draw_map(cr, sizeX, sizeY, player.ytile+1, player.xtile+1 );
-  //}
-  //cairo_stroke(cr);
 }
 
 static gboolean on_key_released (GtkWidget *widget, GdkEventKey *
@@ -285,15 +288,9 @@ event, Actor* player) {
     default:
     printf("Something else\n");
   }
-  //gint xdirection = ((player->nextdirection + 1)%4-2)%2;
-  //gint ydirection = (player->nextdirection%4-2)%2;
   if (player->direction == -1) {
     player->direction = player->nextdirection;
   }
-  //if (!will_block_on_wall (player, xdirection, ydirection)) {
-  //  player->direction = player->nextdirection;
-  //  on_tick(NULL);
-  //}
     
   return FALSE;
 }
@@ -302,8 +299,17 @@ int
 main (int argc, char *argv[])
 {
   GtkWidget *window;
-
   gtk_init (&argc, &argv);
+  GError * error = NULL;
+  tiles[0] = rsvg_handle_new_from_file ("castleCenter.svg", &error);
+  if (error) {
+    printf ("%s\n", error->message);
+  }
+  tiles[1] = rsvg_handle_new_from_file ("boxEmpty.svg", NULL);
+  tiles[2] = rsvg_handle_new_from_file ("boxAlt.svg", NULL);
+  tiles[3] = rsvg_handle_new_from_file ("castleCenter.svg", NULL);
+  coin = rsvg_handle_new_from_file ("coin.svg", NULL);
+  //exit(1);
   randgen = g_rand_new_with_seed (g_get_real_time());
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW (window), WINWIDTH, WINHEIGHT);
